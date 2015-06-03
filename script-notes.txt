@@ -1,0 +1,315 @@
+## A slightly sanitized, but still fairly authentic journal of my journey
+
+# Downloaded Private SSA Key from udacity and moved to ~/.ssh
+
+$ chmod 600 ~/.ssh/udacity_key.rsa
+$ ssh -i ~/.ssh/udacity_key.rsa root@52.11.74.216
+
+# initial setup at https://www.digitalocean.com/community/tutorials/initial-server-setup-with-ubuntu-12-04
+root@ip-10-20-40-232:~# passwd				# change root password
+
+# create new, non-root user
+root@ip-10-20-40-232:~# adduser mkmadd
+root@ip-10-20-40-232:~# adduser grader
+
+# Give root privileges to mkmadd and grader
+root@ip-10-20-40-232:~# visudo				# visudo command opens /etc/sudoers.tmp for editing
+	# User privilege specification
+	root	ALL=(ALL:ALL) ALL
+	mkmadd	ALL=(ALL:ALL) ALL
+	grader	ALL=(ALL:ALL) ALL
+
+# remove root login and allow mkmadd and grader, change port to 2200
+root@ip-10-20-40-232:~# nano /etc/ssh/sshd_config
+	# changed:
+	Port 2200					# from 22
+	PermitRootLogin no			# from without-password
+	# uncommented:
+	AuthorizedKeysFile      %h/.ssh/authorized_keys
+	# verify:
+	PasswordAuthentication no	# key-based authentication only
+	# added to end of file:
+	UseDNS no
+	AllowUsers mkmadd grader
+
+root@ip-10-20-40-232:~# reload ssh
+
+# LEAVING EXISTING CONNECTION OPEN, open second terminal and try to ssh in
+$ ssh -i ~/.ssh/udacity_key.rsa -p 2200 grader@52.11.74.216		# grader rejected, not good
+Permission denied (publickey).
+
+# Trying to log in as grader not working
+
+# copy ~/.ssh with authorized_keys to grader's home directory
+root@ip-10-20-40-232:~# cp -r ~/.ssh ../home/grader
+root@ip-10-20-40-232:~# chown -R grader: ../home/grader/.ssh	# make grader the owner of his ~/.ssh
+# verify chmod 700 on ~/.ssh and chmod 600 on ~/.ssh/authorized_keys
+
+# key-gen'd and scp another authentication key to mkmadd's /.ssh (not shown)
+
+# Update all installed packages
+root@ip-10-20-40-232:~# apt-get update
+grader@ip-10-20-40-232:~$ sudo apt-get upgrade
+grader@ip-10-20-40-232:~$ sudo apt-get dist-upgrade		# to install the packages that "have been kept back."
+
+
+# Setup ufw (Uncomplicated FireWall)
+# verify IPV6=yes in /etc/default/ufw
+grader@ip-10-20-40-232:~$ cat /etc/default/ufw
+grader@ip-10-20-40-232:~$ sudo ufw default deny incoming && sudo ufw default allow outgoing
+grader@ip-10-20-40-232:~$ sudo ufw allow 2200/tcp		# for ssh - allow ssh is shorthand for 22/tcp, 2200/ssh does not work
+grader@ip-10-20-40-232:~$ sudo ufw allow 80,443/tcp		# http - 80 and 443 for ssl
+grader@ip-10-20-40-232:~$ sudo ufw delete allow 80,443/tcp	# instructions say port 80 only
+grader@ip-10-20-40-232:~$ sudo ufw allow www
+grader@ip-10-20-40-232:~$ sudo ufw allow ntp
+grader@ip-10-20-40-232:~$ sudo ufw logging on
+grader@ip-10-20-40-232:~$ sudo ufw enable
+grader@ip-10-20-40-232:~$ sudo ufw status
+	Status: active
+
+	To                         Action      From
+	--                         ------      ----
+	2200/tcp                   ALLOW       Anywhere
+	123                        ALLOW       Anywhere
+	80/tcp                     ALLOW       Anywhere
+	2200/tcp (v6)              ALLOW       Anywhere (v6)
+	123 (v6)                   ALLOW       Anywhere (v6)
+	80/tcp (v6)                ALLOW       Anywhere (v6)
+
+
+# install ntp
+grader@ip-10-20-40-232:~$ sudo apt-get update
+grader@ip-10-20-40-232:~$ sudo apt-get install ntp
+
+# Configure the local timezone to UTC
+grader@ip-10-20-40-232:~$ sudo dpkg-reconfigure tzdata
+grader@ip-10-20-40-232:~$ timedatectl
+		  Local time: Tue 2015-06-02 06:39:41 UTC
+	  Universal time: Tue 2015-06-02 06:39:41 UTC
+			Timezone: Etc/UTC (UTC, +0000)
+		 NTP enabled: yes
+	NTP synchronized: no
+	 RTC in local TZ: no
+		  DST active: n/a
+
+
+# Install Postgresql
+grader@ip-10-20-40-232:~$ sudo apt-get update
+grader@ip-10-20-40-232:~$ sudo apt-get install postgresql postgresql-contrib
+# verify no remote connections allowed; no hosts other than localhost
+grader@ip-10-20-40-232:~$ sudo nano /etc/postgresql/9.3/main/pg_hba.conf
+	local   all             postgres                                peer
+	local   all             all                                     peer
+	host    all             all             127.0.0.1/32            md5
+	host    all             all             ::1/128                 md5
+
+# Install git
+
+grader@ip-10-20-40-232:~$ sudo apt-get update
+grader@ip-10-20-40-232:~$ sudo apt-get install git
+grader@ip-10-20-40-232:~$ git config --global user.name "Michael K. Maddeford"
+grader@ip-10-20-40-232:~$ git config --global user.email "mkmadd@gmail.com"
+grader@ip-10-20-40-232:~$ git clone https://github.com/mkmadd/todo.git
+
+# Install all the libraries needed to get my app up and running
+grader@ip-10-20-40-232:~/todo$ sudo apt-get install python-pip
+grader@ip-10-20-40-232:~/todo$ sudo apt-get install libpq-dev
+grader@ip-10-20-40-232:~/todo$ sudo apt-get install python-dev
+grader@ip-10-20-40-232:~/todo$ sudo apt-get install libffi-dev
+grader@ip-10-20-40-232:~/todo$ sudo pip install -r requirements.txt
+
+# add persistent environtment variables; add below lines to /etc/environment
+grader@ip-10-20-40-232:~/todo$ sudo nano /etc/environment
+	DATABASE_URL='postgresql:///todo'
+	TODO_SECRET_KEY='not-appearing-in-this-repository'
+	OAUTH_CREDENTIALS='{"google": {"id": "not-appearing-in-this-repository","secret": "not-appearing-in-this-repository"},"github": {"id": "not-appearing-in-this-repository","secret": "not-appearing-in-this-repository"}, "facebook": {"id": "not-appearing-in-this-repository", "secret": "not-appearing-in-this-repository"}, "twitter": {"id": "not-appearing-in-this-repository", "secret": "not-appearing-in-this-repository"}}'
+	TODO_ROOT_ADMIN_ID='not-appearing-in-this-repository'
+	APP_SETTINGS='config.ProductionConfig'
+
+
+# Install Apache
+
+grader@ip-10-20-40-232:~$ sudo apt-get update
+grader@ip-10-20-40-232:~$ sudo apt-get install apache2
+
+grader@ip-10-20-40-232:~$ sudo apt-get install libapache2-mod-wsgi	# to serve Python apps from Apache
+
+# move todo directory to /var/www
+grader@ip-10-20-40-232:~$ sudo mv ./todo /var/www
+
+# create apache conf file
+# got domain name from http://www.hcidata.info/host2ip.cgi
+grader@ip-10-20-40-232:~$ sudo nano /etc/apache2/sites-available/todo.conf
+	<VirtualHost *:80>
+			ServerName 52.11.74.216
+			ServerAdmin grader@52.11.74.216
+			ServerAlias ec2-52-11-74-216.us-west-2.compute.amazonaws.com
+			WSGIScriptAlias / /var/www/todo/todo.wsgi
+			<Directory /var/www/todo/app>
+					Order allow,deny
+					Allow from all
+			</Directory>
+			Alias /static /var/www/todo/app/static
+			<Directory /var/www/todo/app/static>
+					Order allow,deny
+					Allow from all
+			</Directory>
+	</VirtualHost>
+
+
+grader@ip-10-20-40-232:~$ sudo a2ensite todo
+
+# create .wsgi entry point
+grader@ip-10-20-40-232:~$ sudo nano /var/www/todo/todo.wsgi
+	from app import app as application
+
+grader@ip-10-20-40-232:~$ sudo service apache2 restart
+
+# didn't work
+grader@ip-10-20-40-232:~$ sudo cat /var/log/apache2/error.log
+	t 216.147.232.158:55331]     from app import app as application
+	[Tue Jun 02 19:34:34.053870 2015] [:error] [pid 3673:tid 140476788287232] [clien
+	t 216.147.232.158:55331] ImportError: No module named app
+
+# changed todo.wsgi to following, still didn't work:
+	#!/usr/bin/python
+	import sys
+	import logging
+	logging.basicConfig(stream=sys.stderr)
+	sys.path.insert(0,"/var/www/todo/")
+
+# ...but it fixed no module named app error:
+	t 216.147.232.158:57491]     raise KeyError(key)
+	[Tue Jun 02 19:47:17.314219 2015] [:error] [pid 3812:tid 139886826174208] [clien
+	t 216.147.232.158:57491] KeyError: 'APP_SETTINGS'
+	from app import app as application
+
+# changed todo.wsgi to following, and ended up working (Apache sanitizes working environment):
+	#!/usr/bin/python
+	import os
+	import sys
+	import logging
+	logging.basicConfig(stream=sys.stderr)
+	sys.path.insert(0,"/var/www/todo/")
+
+	os.environ['DATABASE_URL']='postgresql:///todo'
+	os.environ['TODO_SECRET_KEY']='not-appearing-in-this-repository'
+	os.environ['OAUTH_CREDENTIALS']='not-appearing-in-this-repository'
+	os.environ['TODO_ROOT_ADMIN_ID']='not-appearing-in-this-repository'
+	os.environ['APP_SETTINGS']='config.ProductionConfig'
+
+	from app import app as application
+
+
+# create postgresql role 'catalog'
+grader@ip-10-20-40-232:~$ sudo -u postgres createuser -e -P catalog
+# create todo database for catalog role
+grader@ip-10-20-40-232:~$ sudo -u postgres createdb -O catalog todo
+
+# fix env var DATABASE_URL with new user and password in todo.wsgi and /etc/environment
+	os.environ['DATABASE_URL']='postgresql://catalog:<not-appearing-in-this-repository>@localhost/todo'
+	DATABASE_URL='postgresql://catalog:<not-appearing-in-this-repository>@localhost/todo'
+
+grader@ip-10-20-40-232:~$ sudo -E python /var/www/todo/populate.py		# create tables
+
+# restrict catalog privileges; remove ownership, allow read, update, insert, delete rows in tables
+# and call currval and nextval and select in sequences
+grader@ip-10-20-40-232:~$ sudo -u postgres psql
+todo=# REASSIGN OWNED BY catalog TO postgres;
+todo=# GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE todo, client_user TO catalog;
+todo=# GRANT USAGE, SELECT ON SEQUENCE client_user_id_seq, todo_id_seq TO catalog;
+
+
+
+# The website works!  (Well, with github.  Need to fix the rest of the provider logins)
+
+# Google now works, but Facebook and Github don't.  Changed Facebook and Github to domain name
+# was able to do ip address separated by comma on Facebook, but couldn't get Github to work from ip address and domain name
+# So all work from domain name, but Google and Github don't from ip address.
+
+
+## Clean up
+
+# get rid of sudo: unable to resolve host ip-10-20-40-232; add hostname to /etc/hosts
+grader@ip-10-20-40-232:~$ sudo nano /etc/hosts
+	127.0.0.1 localhost ip-10-20-40-232
+
+# get rid of following message while restarting apache web server:
+	 * Restarting web server apache2
+	AH00558: apache2: Could not reliably determine the server's fully qualified doma
+	in name, using 127.0.0.1. Set the 'ServerName' directive globally to suppress th
+	is message
+	   ...done.
+# http://askubuntu.com/questions/256013/could-not-reliably-determine-the-servers-fully-qualified-domain-name
+grader@ip-10-20-40-232:~$ echo "ServerName localhost" | sudo tee /etc/apache2/conf-available/fqdn.conf
+grader@ip-10-20-40-232:~$ sudo a2enconf fqdn
+grader@ip-10-20-40-232:~$ sudo service apache2 reload
+
+
+## Install Fail2Ban
+# https://www.digitalocean.com/community/tutorials/how-to-protect-ssh-with-fail2ban-on-ubuntu-12-04
+
+grader@ip-10-20-40-232:~$ sudo apt-get update
+grader@ip-10-20-40-232:~$ sudo apt-get install fail2ban
+grader@ip-10-20-40-232:~$ sudo cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.local
+grader@ip-10-20-40-232:~$ sudo nano /etc/fail2ban/jail.local
+	# change following:
+	ignoreip = 127.0.0.1/8 216.147.232.158		# add my ip address
+	bantime  = 900								# 15 min ban, 900 seconds
+	findtime = 900								# banned if hit maxtries in last 900 seconds
+
+	[ssh]
+	port     = 2200								# change ssh port
+
+grader@ip-10-20-40-232:~$ sudo service fail2ban restart
+
+
+## cron job for updates
+# https://help.ubuntu.com/community/AutoWeeklyUpdateHowTo
+grader@ip-10-20-40-232:~$ nano autoupdt
+grader@ip-10-20-40-232:~$ cat autoupdt
+	#!/bin/bash
+	apt-get update
+	apt-get upgrade -y
+	apt-get autoclean
+
+grader@ip-10-20-40-232:~$ sudo mv autoupdt /etc/cron.weekly
+grader@ip-10-20-40-232:~$ sudo chmod 755 /etc/cron.weekly/autoupdt		# make executable
+
+
+## install monit for monitoring
+
+grader@ip-10-20-40-232:~$ sudo apt-get install monit
+grader@ip-10-20-40-232:~$ sudo nano /etc/monit/monitrc
+	set httpd port 2812 and
+		use address localhost		# only accept connection from localhost
+		allow localhost				# allow localhost to connect to the server
+
+	check process apache with pidfile /run/apache2/apache2.pid
+		start program = "/etc/init.d/apache2 start" with timeout 60 seconds
+		stop program  = "/etc/init.d/apache2 stop"
+
+	check process ntpd with pidfile /var/run/ntpd.pid
+	   start program = "/etc/init.d/ntp start"
+	   stop  program = "/etc/init.d/ntp stop"
+
+	check process postgres with pidfile /run/postgresql/9.3-main.pid
+	   start program = "/etc/init.d/postgresql start"
+	   stop  program = "/etc/init.d/postgresql stop"
+
+	check process sshd with pidfile /var/run/sshd.pid
+	   start program  "/etc/init.d/ssh start"
+	   stop program  "/etc/init.d/ssh stop"
+	   if failed port 2200 protocol ssh then restart
+
+grader@ip-10-20-40-232:~$ sudo monit -t
+grader@ip-10-20-40-232:~$ sudo monit reload
+grader@ip-10-20-40-232:~$ sudo monit start all
+
+grader@ip-10-20-40-232:~$ sudo shutdown -r now		# reboot server
+
+# Can I get back in?
+$ ssh -p 2200 -i ~/.ssh/udacity_key.rsa grader@52.11.74.216
+$ ssh -p 2200 -i ~/.ssh/udacity_p5 mkmadd@52.11.74.216
+
+# Woot!
