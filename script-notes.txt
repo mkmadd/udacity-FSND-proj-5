@@ -144,6 +144,9 @@ grader@ip-10-20-40-232:~$ sudo nano /etc/apache2/sites-available/todo.conf
 			ServerName 52.11.74.216
 			ServerAdmin grader@52.11.74.216
 			ServerAlias ec2-52-11-74-216.us-west-2.compute.amazonaws.com
+			RewriteEngine On
+			RewriteCond %{HTTP_HOST} ^52\.11\.74\.216$
+			RewriteRule ^/(.*)$ http://ec2-52-11-74-216.us-west-2.compute.amazonaws.com/$1 [L,R]
 			WSGIScriptAlias / /var/www/todo/todo.wsgi
 			<Directory /var/www/todo/app>
 					Order allow,deny
@@ -156,6 +159,9 @@ grader@ip-10-20-40-232:~$ sudo nano /etc/apache2/sites-available/todo.conf
 			</Directory>
 	</VirtualHost>
 
+# The three Rewrite rules were needed to rewrite the IP to domain name to get rid of the annoying Google problem
+# Then required mod_rewrite to be enabled:
+grader@ip-10-20-40-232:~$ sudo a2enmod rewrite
 
 grader@ip-10-20-40-232:~$ sudo a2ensite todo
 
